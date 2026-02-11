@@ -1,19 +1,3 @@
-Perfeito 👊 agora vamos fazer a versão COMPLETA com:
-
-✅ Painel 0–36
-✅ Só ADM clica
-✅ Placar ao vivo
-✅ Contagem cor / par / alto
-✅ Histórico
-✅ Reset automático a cada 15 rodadas
-✅ Mensagem organizada profissional
-
-Você só vai copiar e colar.
-
-🔥 CÓDIGO COMPLETO SNIPER COM PLACAR AO VIVO
-
-Apague tudo do sniper.py e cole isso:
-
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import os
