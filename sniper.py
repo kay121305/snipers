@@ -11,6 +11,9 @@ MAX_RODADAS = 15
 
 numeros = []
 mensagem_painel = None
+
+entrada_ativa = None
+tentativas = 0
 alerta_enviado = False
 
 saldos = {}
@@ -52,7 +55,6 @@ def iniciar_painel():
 def atualizar_painel():
     rodada = len(numeros)
     faltam = MAX_RODADAS - rodada
-
     texto = f"🔥 SNIPER AO VIVO 🔥\n\nRodadas: {rodada}/15\nFaltam: {faltam}"
     bot.edit_message_text(texto, GRUPO_ID, mensagem_painel)
 
@@ -61,9 +63,9 @@ def atualizar_painel():
 def enviar_gestor(qtd_numeros):
     for user_id, saldo in saldos.items():
 
-        valor_ficha = 1
-        total = qtd_numeros * valor_ficha
-        retorno = valor_ficha * 36
+        valor = 1
+        total = qtd_numeros * valor
+        retorno = valor * 36
         lucro = retorno - total
 
         texto = f"""
@@ -71,10 +73,8 @@ def enviar_gestor(qtd_numeros):
 
 Saldo: ${saldo}
 
-Entrada:
-${valor_ficha} por número
+Aposte ${valor} por número
 Total investido: ${total}
-
 Retorno possível: ${retorno}
 Lucro líquido: ${lucro}
 """
@@ -83,37 +83,110 @@ Lucro líquido: ${lucro}
 # ================= ANALISE =================
 
 def analisar():
-    global alerta_enviado
-
-    if alerta_enviado:
-        return
+    global entrada_ativa, tentativas, alerta_enviado
 
     total = len(numeros)
+    restante = MAX_RODADAS - total
 
-    count_A = sum(1 for n in numeros if n in grupo_A)
-    count_B = sum(1 for n in numeros if n in grupo_B)
+    pretos = vermelhos_c = pares = impares = altos = baixos = 0
+    count_A = count_B = 0
 
-    if total >= 10 and count_A == 0:
+    for n in numeros:
+        if n in grupo_A: count_A += 1
+        if n in grupo_B: count_B += 1
+
+        cor, paridade, altura = classificar(n)
+
+        if cor == "Preto": pretos += 1
+        if cor == "Vermelho": vermelhos_c += 1
+        if paridade == "Par": pares += 1
+        if paridade == "Ímpar": impares += 1
+        if altura == "Alto": altos += 1
+        if altura == "Baixo": baixos += 1
+
+    # ===== GREEN CHECK =====
+
+    if entrada_ativa:
+        ultimo = numeros[-1]
+
+        if entrada_ativa == "A" and ultimo in grupo_A:
+            bot.send_message(GRUPO_ID, "✅ GREEN ESTRATÉGIA A")
+            entrada_ativa = None
+            alerta_enviado = False
+            tentativas = 0
+            return
+
+        if entrada_ativa == "B" and ultimo in grupo_B:
+            bot.send_message(GRUPO_ID, "✅ GREEN ESTRATÉGIA B")
+            entrada_ativa = None
+            alerta_enviado = False
+            tentativas = 0
+            return
+
+        tentativas += 1
+
+        if tentativas >= 2:
+            bot.send_message(GRUPO_ID, "❌ RED")
+            entrada_ativa = None
+            alerta_enviado = False
+            tentativas = 0
+            return
+
+    # ===== ESTRATÉGIA A =====
+
+    if total >= 10 and count_A == 0 and not alerta_enviado:
+        entrada_ativa = "A"
+        tentativas = 0
         alerta_enviado = True
-        bot.send_message(GRUPO_ID, "🚨 Estratégia A: Entrar 3-6-9")
+        bot.send_message(GRUPO_ID, "🚨 ENTRAR: 3 - 6 - 9")
         enviar_gestor(3)
+        return
 
-    elif total >= 10 and count_B == 0:
+    # ===== ESTRATÉGIA B =====
+
+    if total >= 10 and count_B == 0 and not alerta_enviado:
+        entrada_ativa = "B"
+        tentativas = 0
         alerta_enviado = True
-        bot.send_message(GRUPO_ID, "🚨 Estratégia B: Entrar 0-10")
+        bot.send_message(GRUPO_ID, "🚨 ENTRAR: 0 - 10")
         enviar_gestor(2)
+        return
+
+    # ===== TENDÊNCIA MATEMÁTICA =====
+
+    if restante <= 3 and not alerta_enviado:
+
+        if pares > impares:
+            lista = [n for n in range(37) if n % 2 == 1]
+            bot.send_message(GRUPO_ID, f"🔥 TENDÊNCIA PAR FORTE\nEntrar ÍMPAR:\n{lista}")
+            enviar_gestor(len(lista))
+            alerta_enviado = True
+            return
+
+        if pretos > vermelhos_c:
+            lista = list(vermelhos)
+            bot.send_message(GRUPO_ID, f"🔥 TENDÊNCIA PRETO FORTE\nEntrar VERMELHO:\n{lista}")
+            enviar_gestor(len(lista))
+            alerta_enviado = True
+            return
+
+        if altos > baixos:
+            lista = [n for n in range(1,19)]
+            bot.send_message(GRUPO_ID, f"🔥 TENDÊNCIA ALTO FORTE\nEntrar BAIXO:\n{lista}")
+            enviar_gestor(len(lista))
+            alerta_enviado = True
+            return
 
 # ================= START =================
 
 @bot.message_handler(commands=['start'])
 def start(msg):
 
+    aguardando_saldo.add(msg.from_user.id)
+    bot.send_message(msg.chat.id, "💰 Informe seu saldo atual:")
+
     if msg.from_user.id in ADMINS:
         bot.send_message(msg.chat.id, "🎯 PAINEL ADM", reply_markup=criar_tabela())
-
-    else:
-        aguardando_saldo.add(msg.from_user.id)
-        bot.send_message(msg.chat.id, "💰 Informe seu saldo atual:")
 
 # ================= RECEBER SALDO =================
 
@@ -123,7 +196,7 @@ def receber_saldo(msg):
         saldo = float(msg.text)
         saldos[msg.from_user.id] = saldo
         aguardando_saldo.remove(msg.from_user.id)
-        bot.send_message(msg.chat.id, "✅ Saldo salvo com sucesso!")
+        bot.send_message(msg.chat.id, "✅ Saldo registrado com sucesso!")
     except:
         bot.send_message(msg.chat.id, "Digite apenas números.")
 
@@ -139,7 +212,6 @@ def receber(call):
     numero = int(call.data)
     numeros.append(numero)
 
-    # Contadores
     pretos = verm = pares = impares = altos = baixos = 0
 
     for n in numeros:
@@ -181,13 +253,13 @@ Baixo: {baixos}
     analisar()
 
     if len(numeros) == MAX_RODADAS:
-        bot.send_message(GRUPO_ID, f"✅ CICLO FINALIZADO\n{numeros}")
-        numeros = []
+        bot.send_message(GRUPO_ID, f"📊 CICLO FINALIZADO\n{numeros}")
+        numeros.clear()
         alerta_enviado = False
         iniciar_painel()
 
 # ================= INICIAR =================
 
-print("🔥 SNIPER VIP ONLINE 🔥")
+print("🔥 SNIPER VIP COMPLETO ONLINE 🔥")
 iniciar_painel()
 bot.infinity_polling()
