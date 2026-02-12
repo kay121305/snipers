@@ -29,9 +29,9 @@ grupo_entrada = None
 gales = 0
 numero_alerta = None
 
-tendencia_ativa = False
-numeros_tendencia = []
-rodadas_tendencia = 0
+filtro_ativo = False
+numeros_filtro = []
+gales_filtro = 0
 
 banca = 0
 aguardando_banca = False
@@ -39,20 +39,28 @@ aguardando_banca = False
 # ================= RESET =================
 def resetar():
     global numeros, placar, entrada_ativa, gales
-    global numero_alerta, tendencia_ativa, rodadas_tendencia
+    global numero_alerta, filtro_ativo, numeros_filtro, gales_filtro
 
     numeros.clear()
     placar.update({"par":0,"impar":0,"preto":0,"vermelho":0,"alto":0,"baixo":0})
     entrada_ativa = None
     gales = 0
     numero_alerta = None
-    tendencia_ativa = False
-    rodadas_tendencia = 0
+    filtro_ativo = False
+    numeros_filtro.clear()
+    gales_filtro = 0
 
-# ================= TECLADO =================
+# ================= TECLADO 0–36 =================
 def teclado():
     kb = InlineKeyboardMarkup(row_width=6)
-    botoes = [InlineKeyboardButton(str(i), callback_data=str(i)) for i in range(37)]
+    botoes = []
+    for i in range(37):
+        cor = ""
+        if i in pretos:
+            cor = "⚫"
+        elif i in vermelhos:
+            cor = "🔴"
+        botoes.append(InlineKeyboardButton(f"{i}{cor}", callback_data=str(i)))
     kb.add(*botoes)
     return kb
 
@@ -103,63 +111,44 @@ Entrada: {sorted(numeros_aposta)}
 🔺 Agressivo: R${agressivo} por ficha
 """)
 
-# ================= ESTRATEGIAS =================
-def verificar_estrategias(num):
-    global entrada_ativa, gales, numero_alerta, grupo_entrada
+# ================= ESTRATEGIAS 10 RODADAS =================
+def verificar_sinal_10_rodadas():
+    global entrada_ativa, grupo_entrada, gales, numero_alerta
+    ultimos10 = numeros[-10:] if len(numeros) >= 10 else numeros
 
-    if entrada_ativa:
-        if num in grupo_entrada:
-            bot.send_message(GRUPO_ID,f"✅ GREEN no número {num}")
-            entrada_ativa = None
-            gales = 0
-            return
-
-        gales += 1
-        if gales < 3:
-            bot.send_message(GRUPO_ID,f"⚠ Gale {gales}")
-        else:
-            bot.send_message(GRUPO_ID,"❌ LOSS — Próxima entrada")
-            entrada_ativa = None
-            gales = 0
-        return
-
-    if len(numeros) >= 10:
-        ultimos10 = numeros[-10:]
-        if not any(n in grupo_A for n in ultimos10):
-            entrada_ativa = True
-            grupo_entrada = grupo_A
-            numero_alerta = num
-            gales = 0
-
-            bot.send_message(GRUPO_ID,
-f"""🚨 SINAL ESTRATÉGIA A
+    # Estratégia A
+    if not any(n in grupo_A for n in ultimos10):
+        entrada_ativa = True
+        grupo_entrada = grupo_A
+        numero_alerta = ultimos10[-1] if ultimos10 else None
+        gales = 0
+        bot.send_message(GRUPO_ID,
+f"""🚨 SINAL ESTRATÉGIA A (10 rodadas sem vir)
 
 Após o número: {numero_alerta}
-
 Entrar nos números: {sorted(grupo_A)}
 Até 3 Gales
 """)
-            enviar_gestor(grupo_A)
+        enviar_gestor(grupo_A)
 
-        elif not any(n in grupo_B for n in ultimos10):
-            entrada_ativa = True
-            grupo_entrada = grupo_B
-            numero_alerta = num
-            gales = 0
-
-            bot.send_message(GRUPO_ID,
-f"""🚨 SINAL ESTRATÉGIA B
+    # Estratégia B
+    elif not any(n in grupo_B for n in ultimos10):
+        entrada_ativa = True
+        grupo_entrada = grupo_B
+        numero_alerta = ultimos10[-1] if ultimos10 else None
+        gales = 0
+        bot.send_message(GRUPO_ID,
+f"""🚨 SINAL ESTRATÉGIA B (10 rodadas sem vir)
 
 Após o número: {numero_alerta}
-
 Entrar nos números: {sorted(grupo_B)}
 Até 3 Gales
 """)
-            enviar_gestor(grupo_B)
+        enviar_gestor(grupo_B)
 
-# ================= RESUMO + FILTRO APÓS 15 RODADAS =================
+# ================= RESUMO 15 RODADAS =================
 def resumo_15_rodadas():
-    global numeros, placar
+    global numeros, placar, filtro_ativo, numeros_filtro
 
     bot.send_message(GRUPO_ID,
 f"""📊 RESUMO 15 RODADAS
@@ -169,32 +158,33 @@ Preto {placar['preto']} x {placar['vermelho']} Vermelho
 Alto {placar['alto']} x {placar['baixo']} Baixo
 """)
 
-    # ✅ FILTRO INTELIGENTE SÓ APÓS 15 RODADAS
-    numeros_contra = []
+    # Filtro inteligente / tendência após 15 rodadas
+    numeros_filtro.clear()
     if placar["par"] > placar["impar"]:
-        numeros_contra += [n for n in range(37) if n%2==1]  # impar
+        numeros_filtro += [n for n in range(37) if n%2==1]
     else:
-        numeros_contra += [n for n in range(37) if n%2==0]  # par
+        numeros_filtro += [n for n in range(37) if n%2==0]
 
     if placar["preto"] > placar["vermelho"]:
-        numeros_contra = [n for n in numeros_contra if n in vermelhos]
+        numeros_filtro = [n for n in numeros_filtro if n in vermelhos]
     else:
-        numeros_contra = [n for n in numeros_contra if n in pretos]
+        numeros_filtro = [n for n in numeros_filtro if n in pretos]
 
     if placar["alto"] > placar["baixo"]:
-        numeros_contra = [n for n in numeros_contra if n in baixos]
+        numeros_filtro = [n for n in numeros_filtro if n in baixos]
     else:
-        numeros_contra = [n for n in numeros_contra if n in altos]
+        numeros_filtro = [n for n in numeros_filtro if n in altos]
 
-    if numeros_contra:
+    if numeros_filtro:
+        filtro_ativo = True
         bot.send_message(GRUPO_ID,
 f"""🔮 FILTRO INTELIGENTE 15 RODADAS
 
-Números sugeridos (contrário ao que ganhou):
-{sorted(numeros_contra)}
+Números sugeridos (contrário ao que venceu):
+{sorted(numeros_filtro)}
+Até 3 Gales
 """)
 
-    # Zera contador e painel
     resetar()
 
 # ================= COMANDOS =================
@@ -218,7 +208,7 @@ def salvar_banca(msg):
 # ================= CLIQUE =================
 @bot.callback_query_handler(func=lambda call: True)
 def clique(call):
-    global numeros
+    global numeros, entrada_ativa, gales, filtro_ativo, gales_filtro
 
     if call.from_user.id != ADMIN_ID:
         return
@@ -234,11 +224,43 @@ def clique(call):
         reply_markup=teclado()
     )
 
-    verificar_estrategias(num)
+    # ================= Green para Estratégia A/B =================
+    if entrada_ativa:
+        if num in grupo_entrada:
+            bot.send_message(GRUPO_ID,f"✅ GREEN no número {num}")
+            entrada_ativa = False
+            gales = 0
+        else:
+            gales += 1
+            if gales >= 3:
+                bot.send_message(GRUPO_ID,"❌ LOSS — Próxima entrada")
+                entrada_ativa = False
+                gales = 0
+            else:
+                bot.send_message(GRUPO_ID,f"⚠ Gale {gales}")
 
-    # Aplica filtro inteligente somente após 15 rodadas
+    # ================= Green para Filtro Inteligente =================
+    if filtro_ativo:
+        if num in numeros_filtro:
+            bot.send_message(GRUPO_ID,f"✅ GREEN do FILTRO INTELIGENTE no número {num}")
+            filtro_ativo = False
+            gales_filtro = 0
+        else:
+            gales_filtro += 1
+            if gales_filtro >= 3:
+                bot.send_message(GRUPO_ID,"❌ LOSS — Filtro Inteligente")
+                filtro_ativo = False
+                gales_filtro = 0
+            else:
+                bot.send_message(GRUPO_ID,f"⚠ Gale Filtro {gales_filtro}")
+
+    # Checa sinal de Estratégia A ou B apenas após 10 rodadas
+    if len(numeros) >= 10:
+        verificar_sinal_10_rodadas()
+
+    # Aplica resumo e filtro após 15 rodadas
     if len(numeros) == 15:
         resumo_15_rodadas()
 
-print("🔥 SNIPER VIP ULTRA PROFISSIONAL ONLINE 🔥")
+print("🔥 SNIPER VIP PAINEL 0–36 INTERATIVO COM FILTRO E GREEN ONLINE 🔥")
 bot.infinity_polling()
