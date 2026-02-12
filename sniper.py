@@ -12,32 +12,32 @@ MAX_RODADAS = 15
 numeros = []
 mensagem_painel = None
 alerta_enviado = False
+
 saldos = {}
-aguardando_saldo = []
+aguardando_saldo = set()
+
+vermelhos = {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36}
 
 grupo_A = {3,6,9,13,16,19,23,26,29,33,36}
 grupo_B = {19,15,32,0,26,3,35,12,28,8,25,10,5}
-vermelhos = {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36}
 
 # ================= CLASSIFICAR =================
 
 def classificar(numero):
     if numero == 0:
-        return "verde", "zero", "zero"
+        return "Verde", "-", "-"
 
-    cor = "vermelho" if numero in vermelhos else "preto"
-    par = "par" if numero % 2 == 0 else "impar"
-    altura = "baixo" if numero <= 18 else "alto"
+    cor = "Vermelho" if numero in vermelhos else "Preto"
+    paridade = "Par" if numero % 2 == 0 else "Ímpar"
+    altura = "Baixo" if numero <= 18 else "Alto"
 
-    return cor, par, altura
+    return cor, paridade, altura
 
-# ================= CRIAR TABELA ADM =================
+# ================= TABELA ADM =================
 
 def criar_tabela():
     markup = InlineKeyboardMarkup(row_width=6)
-    botoes = []
-    for i in range(37):
-        botoes.append(InlineKeyboardButton(str(i), callback_data=str(i)))
+    botoes = [InlineKeyboardButton(str(i), callback_data=str(i)) for i in range(37)]
     markup.add(*botoes)
     return markup
 
@@ -45,15 +45,7 @@ def criar_tabela():
 
 def iniciar_painel():
     global mensagem_painel
-
-    texto = """
-🔥 SNIPER AO VIVO 🔥
-
-Rodadas: 0/15
-Faltam: 15
-
-Aguardando números...
-"""
+    texto = "🔥 SNIPER AO VIVO 🔥\n\nRodadas: 0/15\nFaltam: 15"
     msg = bot.send_message(GRUPO_ID, texto)
     mensagem_painel = msg.message_id
 
@@ -61,15 +53,7 @@ def atualizar_painel():
     rodada = len(numeros)
     faltam = MAX_RODADAS - rodada
 
-    texto = f"""
-🔥 SNIPER AO VIVO 🔥
-
-Rodadas: {rodada}/15
-Faltam: {faltam}
-
-Últimos números:
-{numeros}
-"""
+    texto = f"🔥 SNIPER AO VIVO 🔥\n\nRodadas: {rodada}/15\nFaltam: {faltam}"
     bot.edit_message_text(texto, GRUPO_ID, mensagem_painel)
 
 # ================= GESTOR =================
@@ -77,24 +61,22 @@ Faltam: {faltam}
 def enviar_gestor(qtd_numeros):
     for user_id, saldo in saldos.items():
 
-        aposta_base = 1
-        total_entrada = qtd_numeros * aposta_base
-        lucro = aposta_base * 36 - total_entrada
-        meia_banca = saldo / 2
-        banca_total = saldo
+        valor_ficha = 1
+        total = qtd_numeros * valor_ficha
+        retorno = valor_ficha * 36
+        lucro = retorno - total
 
         texto = f"""
 💰 GESTÃO DE BANCA
 
 Saldo: ${saldo}
 
-Entrada Normal:
-Aposte $1 em cada número
-Total investido: ${total_entrada}
-Lucro possível: ${lucro}
+Entrada:
+${valor_ficha} por número
+Total investido: ${total}
 
-Meia banca: ${meia_banca}
-Banca total: ${banca_total}
+Retorno possível: ${retorno}
+Lucro líquido: ${lucro}
 """
         bot.send_message(user_id, texto)
 
@@ -111,33 +93,15 @@ def analisar():
     count_A = sum(1 for n in numeros if n in grupo_A)
     count_B = sum(1 for n in numeros if n in grupo_B)
 
-    pares = sum(1 for n in numeros if n != 0 and n % 2 == 0)
-    impares = sum(1 for n in numeros if n % 2 == 1)
-
-    # Estratégia A
     if total >= 10 and count_A == 0:
         alerta_enviado = True
-        bot.send_message(GRUPO_ID, "🚨 ESTRATÉGIA A\nEntrar: 3-6-9")
+        bot.send_message(GRUPO_ID, "🚨 Estratégia A: Entrar 3-6-9")
         enviar_gestor(3)
-        return
 
-    # Estratégia B
-    if total >= 10 and count_B == 0:
+    elif total >= 10 and count_B == 0:
         alerta_enviado = True
-        bot.send_message(GRUPO_ID, "🚨 ESTRATÉGIA B\nEntrar: 0-10")
+        bot.send_message(GRUPO_ID, "🚨 Estratégia B: Entrar 0-10")
         enviar_gestor(2)
-        return
-
-    # Tendência antecipada na 12ª
-    if total == 12:
-        if pares > impares:
-            alerta_enviado = True
-            bot.send_message(GRUPO_ID, "📊 Tendência PAR forte\nEntrar ÍMPAR")
-            enviar_gestor(18)
-        elif impares > pares:
-            alerta_enviado = True
-            bot.send_message(GRUPO_ID, "📊 Tendência ÍMPAR forte\nEntrar PAR")
-            enviar_gestor(18)
 
 # ================= START =================
 
@@ -148,18 +112,18 @@ def start(msg):
         bot.send_message(msg.chat.id, "🎯 PAINEL ADM", reply_markup=criar_tabela())
 
     else:
-        aguardando_saldo.append(msg.from_user.id)
+        aguardando_saldo.add(msg.from_user.id)
         bot.send_message(msg.chat.id, "💰 Informe seu saldo atual:")
 
 # ================= RECEBER SALDO =================
 
-@bot.message_handler(func=lambda message: message.from_user.id in aguardando_saldo)
+@bot.message_handler(func=lambda m: m.from_user.id in aguardando_saldo)
 def receber_saldo(msg):
     try:
         saldo = float(msg.text)
         saldos[msg.from_user.id] = saldo
         aguardando_saldo.remove(msg.from_user.id)
-        bot.send_message(msg.chat.id, "✅ Saldo registrado com sucesso!")
+        bot.send_message(msg.chat.id, "✅ Saldo salvo com sucesso!")
     except:
         bot.send_message(msg.chat.id, "Digite apenas números.")
 
@@ -175,12 +139,37 @@ def receber(call):
     numero = int(call.data)
     numeros.append(numero)
 
+    # Contadores
+    pretos = verm = pares = impares = altos = baixos = 0
+
+    for n in numeros:
+        cor, paridade, altura = classificar(n)
+        if cor == "Preto": pretos += 1
+        if cor == "Vermelho": verm += 1
+        if paridade == "Par": pares += 1
+        if paridade == "Ímpar": impares += 1
+        if altura == "Alto": altos += 1
+        if altura == "Baixo": baixos += 1
+
+    cor, paridade, altura = classificar(numero)
+
     texto_adm = f"""
 🎯 PAINEL ADM ({len(numeros)}/15)
 
-Sequência:
-{numeros}
+Número: {numero}
+Cor: {cor}
+Paridade: {paridade}
+Altura: {altura}
+
+📊 PLACAR:
+Preto: {pretos}
+Vermelho: {verm}
+Par: {pares}
+Ímpar: {impares}
+Alto: {altos}
+Baixo: {baixos}
 """
+
     bot.edit_message_text(
         texto_adm,
         call.message.chat.id,
@@ -197,8 +186,8 @@ Sequência:
         alerta_enviado = False
         iniciar_painel()
 
-# ================= INICIAR AUTOMATICO =================
+# ================= INICIAR =================
 
-print("🔥 SNIPER VIP 100% ONLINE 🔥")
+print("🔥 SNIPER VIP ONLINE 🔥")
 iniciar_painel()
 bot.infinity_polling()
