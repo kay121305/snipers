@@ -15,9 +15,9 @@ pretos = {2,4,6,8,10,11,13,15,17,20,22,24,26,28,29,31,33,35}
 altos = set(range(19,37))
 baixos = set(range(1,19))
 
-# Estratégias
-grupo_A = {3,6,9,13,16,19,23,26,29,33,36}  # DG du GRAKRAL
-grupo_B = {19,15,32,0,26,3,35,12,28,8,23,10,5}  # Makako LK
+# Estratégias renomeadas
+grupo_A = {3,6,9,13,16,19,23,26,29,33,36}  # DG du GRAL
+grupo_B = {19,15,32,0,26,3,35,12,28,8,23,10,5}  # Makako777
 
 # ================= VARIÁVEIS GLOBAIS =================
 numeros = []
@@ -84,7 +84,7 @@ def teclado():
 def painel_texto():
     """Texto do painel atualizado"""
     return f"""
-🎯 SNIPER VIP ({len(numeros)}/15)
+🎯 SNIPER VIP ({len(numeros)}/15 rodadas)
 
 ⚫ Preto: {placar['preto']} | 🔴 Vermelho: {placar['vermelho']}
 🔵 Par: {placar['par']} | 🟣 Ímpar: {placar['impar']}
@@ -143,9 +143,9 @@ def verificar_sinal_10_rodadas():
         grupo_entrada = grupo_A
         numero_alerta = ultimos10[-1] if ultimos10 else None
         gales = 0
-        nome_jogada = "DG du GRAKRAL"
+        nome_jogada = "DG du GRAL"
         msg = bot.send_message(GRUPO_ID,
-f"""🚨 SINAL ESTRATÉGIA A - {nome_jogada} (10 rodadas sem vir)
+f"""🚨 SINAL {nome_jogada} (10 rodadas sem vir)
 
 Último número antes do sinal: {numero_alerta}
 Entrar nos números: {sorted(grupo_A)}
@@ -159,9 +159,9 @@ Entrar nos números: {sorted(grupo_A)}
         grupo_entrada = grupo_B
         numero_alerta = ultimos10[-1] if ultimos10 else None
         gales = 0
-        nome_jogada = "Makako LK"
+        nome_jogada = "Makako777"
         msg = bot.send_message(GRUPO_ID,
-f"""🚨 SINAL ESTRATÉGIA B - {nome_jogada} (10 rodadas sem vir)
+f"""🚨 SINAL {nome_jogada} (10 rodadas sem vir)
 
 Último número antes do sinal: {numero_alerta}
 Entrar nos números: {sorted(grupo_B)}
