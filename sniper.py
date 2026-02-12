@@ -1,25 +1,26 @@
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import os
+import time
 
+# ================= CONFIGURAÇÃO =================
 TOKEN = os.getenv("TOKEN")
 bot = telebot.TeleBot(TOKEN)
 
-# ================= CONFIG =================
 GRUPO_ID = -1003629208122  # ID do grupo VIP
 ADMIN_ID = 8431121309       # Seu ID
 
-# ===== NUMEROS =====
+# ================= DEFINIÇÃO DE CORES E GRUPOS =================
 vermelhos = {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36}
 pretos = {2,4,6,8,10,11,13,15,17,20,22,24,26,28,29,31,33,35}
 altos = set(range(19,37))
 baixos = set(range(1,19))
 
-# ===== ESTRATEGIAS =====
-grupo_A = {3,6,9,13,16,19,23,26,29}
+# Estratégias
+grupo_A = {3,6,9,13,16,19,23,26,29,33,36}
 grupo_B = {19,15,32,0,26,3,35,12,28,8,23,10,5}
 
-# ===== VARIAVEIS =====
+# ================= VARIÁVEIS GLOBAIS =================
 numeros = []
 placar = {"par":0,"impar":0,"preto":0,"vermelho":0,"alto":0,"baixo":0}
 painel_id = None
@@ -36,8 +37,9 @@ gales_filtro = 0
 banca = 0
 aguardando_banca = False
 
-# ================= RESET =================
+# ================= FUNÇÕES =================
 def resetar():
+    """Reseta contadores e variáveis de rodadas"""
     global numeros, placar, entrada_ativa, gales
     global numero_alerta, filtro_ativo, numeros_filtro, gales_filtro
 
@@ -52,6 +54,7 @@ def resetar():
 
 # ================= TECLADO 0–36 =================
 def teclado():
+    """Gera teclado interativo 0–36"""
     kb = InlineKeyboardMarkup(row_width=6)
     botoes = []
     for i in range(37):
@@ -66,6 +69,7 @@ def teclado():
 
 # ================= PAINEL =================
 def painel_texto():
+    """Texto do painel atualizado"""
     return f"""
 🎯 SNIPER VIP ({len(numeros)}/15)
 
@@ -92,8 +96,9 @@ def atualizar_placar(num):
         if num in baixos:
             placar["baixo"] += 1
 
-# ================= GESTOR =================
+# ================= GESTOR DE BANCA =================
 def enviar_gestor(numeros_aposta):
+    """Envia sugestões de apostas com base na banca"""
     if banca <= 0:
         return
 
@@ -111,8 +116,9 @@ Entrada: {sorted(numeros_aposta)}
 🔺 Agressivo: R${agressivo} por ficha
 """)
 
-# ================= ESTRATEGIAS 10 RODADAS =================
+# ================= ESTRATEGIAS =================
 def verificar_sinal_10_rodadas():
+    """Checa se Estratégia A ou B deve disparar"""
     global entrada_ativa, grupo_entrada, gales, numero_alerta
     ultimos10 = numeros[-10:] if len(numeros) >= 10 else numeros
 
@@ -125,7 +131,7 @@ def verificar_sinal_10_rodadas():
         bot.send_message(GRUPO_ID,
 f"""🚨 SINAL ESTRATÉGIA A (10 rodadas sem vir)
 
-Após o número: {numero_alerta}
+Último número antes do sinal: {numero_alerta}
 Entrar nos números: {sorted(grupo_A)}
 Até 3 Gales
 """)
@@ -140,7 +146,7 @@ Até 3 Gales
         bot.send_message(GRUPO_ID,
 f"""🚨 SINAL ESTRATÉGIA B (10 rodadas sem vir)
 
-Após o número: {numero_alerta}
+Último número antes do sinal: {numero_alerta}
 Entrar nos números: {sorted(grupo_B)}
 Até 3 Gales
 """)
@@ -148,7 +154,8 @@ Até 3 Gales
 
 # ================= RESUMO 15 RODADAS =================
 def resumo_15_rodadas():
-    global numeros, placar, filtro_ativo, numeros_filtro
+    """Envia resumo e filtro inteligente após 15 rodadas"""
+    global numeros, placar, filtro_ativo, numeros_filtro, gales_filtro
 
     bot.send_message(GRUPO_ID,
 f"""📊 RESUMO 15 RODADAS
@@ -158,7 +165,7 @@ Preto {placar['preto']} x {placar['vermelho']} Vermelho
 Alto {placar['alto']} x {placar['baixo']} Baixo
 """)
 
-    # Filtro inteligente / tendência após 15 rodadas
+    # Filtro inteligente
     numeros_filtro.clear()
     if placar["par"] > placar["impar"]:
         numeros_filtro += [n for n in range(37) if n%2==1]
@@ -177,6 +184,7 @@ Alto {placar['alto']} x {placar['baixo']} Baixo
 
     if numeros_filtro:
         filtro_ativo = True
+        gales_filtro = 0
         bot.send_message(GRUPO_ID,
 f"""🔮 FILTRO INTELIGENTE 15 RODADAS
 
@@ -217,6 +225,7 @@ def clique(call):
     numeros.append(num)
     atualizar_placar(num)
 
+    # Atualiza painel
     bot.edit_message_text(
         painel_texto(),
         GRUPO_ID,
@@ -224,7 +233,7 @@ def clique(call):
         reply_markup=teclado()
     )
 
-    # ================= Green para Estratégia A/B =================
+    # ================= Green Estratégia A/B =================
     if entrada_ativa:
         if num in grupo_entrada:
             bot.send_message(GRUPO_ID,f"✅ GREEN no número {num}")
@@ -239,7 +248,7 @@ def clique(call):
             else:
                 bot.send_message(GRUPO_ID,f"⚠ Gale {gales}")
 
-    # ================= Green para Filtro Inteligente =================
+    # ================= Green Filtro Inteligente =================
     if filtro_ativo:
         if num in numeros_filtro:
             bot.send_message(GRUPO_ID,f"✅ GREEN do FILTRO INTELIGENTE no número {num}")
@@ -254,13 +263,14 @@ def clique(call):
             else:
                 bot.send_message(GRUPO_ID,f"⚠ Gale Filtro {gales_filtro}")
 
-    # Checa sinal de Estratégia A ou B apenas após 10 rodadas
+    # Checa sinal de Estratégia A/B apenas após 10 rodadas
     if len(numeros) >= 10:
         verificar_sinal_10_rodadas()
 
-    # Aplica resumo e filtro após 15 rodadas
+    # Resumo e filtro após 15 rodadas
     if len(numeros) == 15:
         resumo_15_rodadas()
 
-print("🔥 SNIPER VIP PAINEL 0–36 INTERATIVO COM FILTRO E GREEN ONLINE 🔥")
+# ================= INICIO =================
+print("🔥 SNIPER VIP PAINEL 0–36 INTERATIVO COMPLETO 🔥")
 bot.infinity_polling()
