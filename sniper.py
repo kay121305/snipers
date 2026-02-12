@@ -175,6 +175,7 @@ def analisar_tendencia(num):
     if placar["par"] >= 8 or placar["preto"] >= 6 or placar["alto"] >= 7:
         tendencia_ativa = True
         rodadas_tendencia = 0
+        # numeros contrários ao que está forte
         numeros_tendencia = [n for n in range(1,37)
                              if n%2==1 and n in vermelhos and n in baixos]
         bot.send_message(GRUPO_ID,
@@ -183,6 +184,43 @@ f"""🔥 FILTRO INTELIGENTE ATIVADO
 Entrar nos números: {sorted(numeros_tendencia)}
 (Válido por 3 rodadas)
 """)
+
+# ================= RESUMO 15 RODADAS =================
+def resumo_15_rodadas():
+    global numeros, placar
+    # Mostrar resultado
+    bot.send_message(GRUPO_ID,
+f"""📊 RESUMO 15 RODADAS
+
+Par {placar['par']} x {placar['impar']} Ímpar
+Preto {placar['preto']} x {placar['vermelho']} Vermelho
+Alto {placar['alto']} x {placar['baixo']} Baixo
+""")
+    # Calcular tendência contrária
+    numeros_contra = []
+    if placar["par"] > placar["impar"]:
+        numeros_contra += [n for n in range(37) if n%2==1]  # impar
+    else:
+        numeros_contra += [n for n in range(37) if n%2==0]  # par
+
+    if placar["preto"] > placar["vermelho"]:
+        numeros_contra = [n for n in numeros_contra if n in vermelhos]
+    else:
+        numeros_contra = [n for n in numeros_contra if n in pretos]
+
+    if placar["alto"] > placar["baixo"]:
+        numeros_contra = [n for n in numeros_contra if n in baixos]
+    else:
+        numeros_contra = [n for n in numeros_contra if n in altos]
+
+    if numeros_contra:
+        bot.send_message(GRUPO_ID,
+f"""🔮 TENDÊNCIA CONTRÁRIA 15 RODADAS
+
+Números sugeridos: {sorted(numeros_contra)}
+""")
+
+    resetar()
 
 # ================= COMANDOS =================
 @bot.message_handler(commands=['start'])
@@ -225,14 +263,7 @@ def clique(call):
     analisar_tendencia(num)
 
     if len(numeros) == 15:
-        bot.send_message(GRUPO_ID,
-f"""📊 RESUMO 15 RODADAS
-
-Par {placar['par']} x {placar['impar']} Ímpar
-Preto {placar['preto']} x {placar['vermelho']} Vermelho
-Alto {placar['alto']} x {placar['baixo']} Baixo
-""")
-        resetar()
+        resumo_15_rodadas()
 
 print("🔥 SNIPER VIP ULTRA PROFISSIONAL ONLINE 🔥")
 bot.infinity_polling()
