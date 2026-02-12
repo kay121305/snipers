@@ -1,265 +1,221 @@
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import os
 
 TOKEN = os.getenv("TOKEN")
 bot = telebot.TeleBot(TOKEN)
 
-ADMINS = [8431121309]
 GRUPO_ID = -1003629208122
-MAX_RODADAS = 15
+ADMIN_ID = 8431121309
 
-numeros = []
-mensagem_painel = None
-
-entrada_ativa = None
-tentativas = 0
-alerta_enviado = False
-
-saldos = {}
-aguardando_saldo = set()
+# ================= NUMEROS =================
 
 vermelhos = {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36}
+pretos = {2,4,6,8,10,11,13,15,17,20,22,24,26,28,29,31,33,35}
 
-grupo_A = {3,6,9,13,16,19,23,26,29,33,36}
-grupo_B = {19,15,32,0,26,3,35,12,28,8,25,10,5}
+altos = set(range(19,37))
+baixos = set(range(1,19))
 
-# ================= CLASSIFICAR =================
+grupo_A = {3,6,9}
+grupo_B = {0,10}
 
-def classificar(numero):
-    if numero == 0:
-        return "Verde", "-", "-"
+# ================= CONTROLE =================
 
-    cor = "Vermelho" if numero in vermelhos else "Preto"
-    paridade = "Par" if numero % 2 == 0 else "Ímpar"
-    altura = "Baixo" if numero <= 18 else "Alto"
+numeros = []
+placar = {}
+banca = {}
+entrada_ativa = None
+alerta_enviado = False
+tentativas = 0
 
-    return cor, paridade, altura
+# ================= FUNÇÕES =================
 
-# ================= TABELA ADM =================
+def resetar_placar():
+    global placar
+    placar = {
+        "par":0,"impar":0,
+        "preto":0,"vermelho":0,
+        "alto":0,"baixo":0
+    }
 
-def criar_tabela():
-    markup = InlineKeyboardMarkup(row_width=6)
-    botoes = [InlineKeyboardButton(str(i), callback_data=str(i)) for i in range(37)]
-    markup.add(*botoes)
-    return markup
+resetar_placar()
 
-# ================= PAINEL GRUPO =================
+def atualizar_placar(num):
+    if num != 0:
+        if num % 2 == 0:
+            placar["par"] += 1
+        else:
+            placar["impar"] += 1
 
-def iniciar_painel():
-    global mensagem_painel
-    texto = "🔥 SNIPER AO VIVO 🔥\n\nRodadas: 0/15\nFaltam: 15"
-    msg = bot.send_message(GRUPO_ID, texto)
-    mensagem_painel = msg.message_id
+        if num in pretos:
+            placar["preto"] += 1
+        if num in vermelhos:
+            placar["vermelho"] += 1
 
-def atualizar_painel():
-    rodada = len(numeros)
-    faltam = MAX_RODADAS - rodada
-    texto = f"🔥 SNIPER AO VIVO 🔥\n\nRodadas: {rodada}/15\nFaltam: {faltam}"
-    bot.edit_message_text(texto, GRUPO_ID, mensagem_painel)
+        if num in altos:
+            placar["alto"] += 1
+        if num in baixos:
+            placar["baixo"] += 1
 
-# ================= GESTOR =================
+def mostrar_placar():
+    return f"""
+📊 PLACAR AO VIVO ({len(numeros)}/15)
+
+Par: {placar['par']} | Ímpar: {placar['impar']}
+Preto: {placar['preto']} | Vermelho: {placar['vermelho']}
+Alto: {placar['alto']} | Baixo: {placar['baixo']}
+"""
+
+def enviar_resumo_15():
+    bot.send_message(GRUPO_ID, f"""
+📈 RESULTADO DAS 15 RODADAS
+
+Par {placar['par']} x {placar['impar']} Ímpar
+Preto {placar['preto']} x {placar['vermelho']} Vermelho
+Alto {placar['alto']} x {placar['baixo']} Baixo
+""")
+
+def analisar_tendencia():
+    total = len(numeros)
+    if total < 12:
+        return
+
+    for chave in ["par","impar","preto","vermelho","alto","baixo"]:
+        if placar[chave] >= 8:
+            if chave == "par":
+                tendencia = "ÍMPAR"
+                nums = [n for n in range(37) if n % 2 == 1]
+            elif chave == "impar":
+                tendencia = "PAR"
+                nums = [n for n in range(37) if n % 2 == 0]
+            elif chave == "preto":
+                tendencia = "VERMELHO"
+                nums = list(vermelhos)
+            elif chave == "vermelho":
+                tendencia = "PRETO"
+                nums = list(pretos)
+            elif chave == "alto":
+                tendencia = "BAIXO"
+                nums = list(baixos)
+            elif chave == "baixo":
+                tendencia = "ALTO"
+                nums = list(altos)
+
+            bot.send_message(GRUPO_ID,
+                f"⚠ {chave.upper()} dominando!\n"
+                f"🎯 Entrar em {tendencia}\n"
+                f"Números: {sorted(nums)}"
+            )
+            break
 
 def enviar_gestor(qtd_numeros):
-    for user_id, saldo in saldos.items():
+    if ADMIN_ID not in banca:
+        return
 
-        valor = 1
-        total = qtd_numeros * valor
-        retorno = valor * 36
-        lucro = retorno - total
+    saldo = banca[ADMIN_ID]
 
-        texto = f"""
+    base = saldo * 0.24
+    medio = saldo * 0.48
+    alto = saldo * 1.0
+
+    def calcular(valor_total):
+        ficha = round(valor_total / qtd_numeros,2)
+        ganho = ficha * 36
+        lucro = round(ganho - valor_total,2)
+        return ficha, ganho, lucro
+
+    f1,g1,l1 = calcular(base)
+    f2,g2,l2 = calcular(medio)
+    f3,g3,l3 = calcular(alto)
+
+    bot.send_message(GRUPO_ID, f"""
 💰 GESTÃO DE BANCA
 
-Saldo: ${saldo}
+🔹 Conservador
+Ficha: R${f1}
+Ganho: R${g1}
+Lucro: R${l1}
 
-Aposte ${valor} por número
-Total investido: ${total}
-Retorno possível: ${retorno}
-Lucro líquido: ${lucro}
-"""
-        bot.send_message(user_id, texto)
+🔹 Médio
+Ficha: R${f2}
+Ganho: R${g2}
+Lucro: R${l2}
 
-# ================= ANALISE =================
+🔹 Agressivo
+Ficha: R${f3}
+Ganho: R${g3}
+Lucro: R${l3}
+""")
 
-def analisar():
-    global entrada_ativa, tentativas, alerta_enviado
+def verificar_estrategia(num):
+    global entrada_ativa, alerta_enviado, tentativas
 
-    total = len(numeros)
-    restante = MAX_RODADAS - total
-
-    pretos = vermelhos_c = pares = impares = altos = baixos = 0
-    count_A = count_B = 0
-
-    for n in numeros:
-        if n in grupo_A: count_A += 1
-        if n in grupo_B: count_B += 1
-
-        cor, paridade, altura = classificar(n)
-
-        if cor == "Preto": pretos += 1
-        if cor == "Vermelho": vermelhos_c += 1
-        if paridade == "Par": pares += 1
-        if paridade == "Ímpar": impares += 1
-        if altura == "Alto": altos += 1
-        if altura == "Baixo": baixos += 1
-
-    # ===== GREEN CHECK =====
-
-    if entrada_ativa:
-        ultimo = numeros[-1]
-
-        if entrada_ativa == "A" and ultimo in grupo_A:
-            bot.send_message(GRUPO_ID, "✅ GREEN ESTRATÉGIA A")
+    if entrada_ativa == "A":
+        if num in grupo_A:
+            bot.send_message(GRUPO_ID,"✅ GREEN ESTRATÉGIA A")
             entrada_ativa = None
             alerta_enviado = False
-            tentativas = 0
             return
 
-        if entrada_ativa == "B" and ultimo in grupo_B:
-            bot.send_message(GRUPO_ID, "✅ GREEN ESTRATÉGIA B")
+    if entrada_ativa == "B":
+        if num in grupo_B:
+            bot.send_message(GRUPO_ID,"✅ GREEN ESTRATÉGIA B")
             entrada_ativa = None
             alerta_enviado = False
-            tentativas = 0
             return
 
-        tentativas += 1
+    if len(numeros) >= 10 and not alerta_enviado:
+        ultimos10 = numeros[-10:]
 
-        if tentativas >= 2:
-            bot.send_message(GRUPO_ID, "❌ RED")
-            entrada_ativa = None
-            alerta_enviado = False
-            tentativas = 0
-            return
-
-    # ===== ESTRATÉGIA A =====
-
-    if total >= 10 and count_A == 0 and not alerta_enviado:
-        entrada_ativa = "A"
-        tentativas = 0
-        alerta_enviado = True
-        bot.send_message(GRUPO_ID, "🚨 ENTRAR: 3 - 6 - 9")
-        enviar_gestor(3)
-        return
-
-    # ===== ESTRATÉGIA B =====
-
-    if total >= 10 and count_B == 0 and not alerta_enviado:
-        entrada_ativa = "B"
-        tentativas = 0
-        alerta_enviado = True
-        bot.send_message(GRUPO_ID, "🚨 ENTRAR: 0 - 10")
-        enviar_gestor(2)
-        return
-
-    # ===== TENDÊNCIA MATEMÁTICA =====
-
-    if restante <= 3 and not alerta_enviado:
-
-        if pares > impares:
-            lista = [n for n in range(37) if n % 2 == 1]
-            bot.send_message(GRUPO_ID, f"🔥 TENDÊNCIA PAR FORTE\nEntrar ÍMPAR:\n{lista}")
-            enviar_gestor(len(lista))
+        if not any(n in grupo_A for n in ultimos10):
+            entrada_ativa = "A"
             alerta_enviado = True
+            bot.send_message(GRUPO_ID,
+                f"🚨 ENTRAR AGORA\n\nApós o número: {num}\n\n🎯 Estratégia A\nEntrar: 3 - 6 - 9")
+            enviar_gestor(3)
             return
 
-        if pretos > vermelhos_c:
-            lista = list(vermelhos)
-            bot.send_message(GRUPO_ID, f"🔥 TENDÊNCIA PRETO FORTE\nEntrar VERMELHO:\n{lista}")
-            enviar_gestor(len(lista))
+        if not any(n in grupo_B for n in ultimos10):
+            entrada_ativa = "B"
             alerta_enviado = True
+            bot.send_message(GRUPO_ID,
+                f"🚨 ENTRAR AGORA\n\nApós o número: {num}\n\n🎯 Estratégia B\nEntrar: 0 - 10")
+            enviar_gestor(2)
             return
 
-        if altos > baixos:
-            lista = [n for n in range(1,19)]
-            bot.send_message(GRUPO_ID, f"🔥 TENDÊNCIA ALTO FORTE\nEntrar BAIXO:\n{lista}")
-            enviar_gestor(len(lista))
-            alerta_enviado = True
-            return
-
-# ================= START =================
+# ================= COMANDOS =================
 
 @bot.message_handler(commands=['start'])
 def start(msg):
+    if msg.from_user.id != ADMIN_ID:
+        bot.send_message(msg.chat.id,"🔒 Apenas admin.")
+        return
+    bot.send_message(msg.chat.id,"Digite o saldo da banca:")
 
-    aguardando_saldo.add(msg.from_user.id)
-    bot.send_message(msg.chat.id, "💰 Informe seu saldo atual:")
+@bot.message_handler(func=lambda m: m.from_user.id == ADMIN_ID and m.text.isdigit())
+def salvar_banca(msg):
+    banca[ADMIN_ID] = float(msg.text)
+    bot.send_message(msg.chat.id,f"💰 Banca registrada: R${msg.text}")
 
-    if msg.from_user.id in ADMINS:
-        bot.send_message(msg.chat.id, "🎯 PAINEL ADM", reply_markup=criar_tabela())
+@bot.message_handler(func=lambda m: m.from_user.id == ADMIN_ID and m.text.isdigit())
+def receber_numero(msg):
+    global numeros
+    num = int(msg.text)
 
-# ================= RECEBER SALDO =================
-
-@bot.message_handler(func=lambda m: m.from_user.id in aguardando_saldo)
-def receber_saldo(msg):
-    try:
-        saldo = float(msg.text)
-        saldos[msg.from_user.id] = saldo
-        aguardando_saldo.remove(msg.from_user.id)
-        bot.send_message(msg.chat.id, "✅ Saldo registrado com sucesso!")
-    except:
-        bot.send_message(msg.chat.id, "Digite apenas números.")
-
-# ================= RECEBER NUMERO =================
-
-@bot.callback_query_handler(func=lambda call: True)
-def receber(call):
-    global numeros, alerta_enviado
-
-    if call.from_user.id not in ADMINS:
+    if num < 0 or num > 36:
         return
 
-    numero = int(call.data)
-    numeros.append(numero)
+    numeros.append(num)
+    atualizar_placar(num)
 
-    pretos = verm = pares = impares = altos = baixos = 0
+    bot.send_message(GRUPO_ID, mostrar_placar())
 
-    for n in numeros:
-        cor, paridade, altura = classificar(n)
-        if cor == "Preto": pretos += 1
-        if cor == "Vermelho": verm += 1
-        if paridade == "Par": pares += 1
-        if paridade == "Ímpar": impares += 1
-        if altura == "Alto": altos += 1
-        if altura == "Baixo": baixos += 1
+    verificar_estrategia(num)
+    analisar_tendencia()
 
-    cor, paridade, altura = classificar(numero)
-
-    texto_adm = f"""
-🎯 PAINEL ADM ({len(numeros)}/15)
-
-Número: {numero}
-Cor: {cor}
-Paridade: {paridade}
-Altura: {altura}
-
-📊 PLACAR:
-Preto: {pretos}
-Vermelho: {verm}
-Par: {pares}
-Ímpar: {impares}
-Alto: {altos}
-Baixo: {baixos}
-"""
-
-    bot.edit_message_text(
-        texto_adm,
-        call.message.chat.id,
-        call.message.message_id,
-        reply_markup=criar_tabela()
-    )
-
-    atualizar_painel()
-    analisar()
-
-    if len(numeros) == MAX_RODADAS:
-        bot.send_message(GRUPO_ID, f"📊 CICLO FINALIZADO\n{numeros}")
+    if len(numeros) == 15:
+        enviar_resumo_15()
         numeros.clear()
-        alerta_enviado = False
-        iniciar_painel()
-
-# ================= INICIAR =================
+        resetar_placar()
 
 print("🔥 SNIPER VIP COMPLETO ONLINE 🔥")
-iniciar_painel()
 bot.infinity_polling()
