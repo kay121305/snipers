@@ -157,38 +157,10 @@ Até 3 Gales
 """)
             enviar_gestor(grupo_B)
 
-# ================= TENDÊNCIA =================
-def analisar_tendencia(num):
-    global tendencia_ativa, numeros_tendencia, rodadas_tendencia
-
-    if tendencia_ativa:
-        rodadas_tendencia += 1
-        if num in numeros_tendencia:
-            bot.send_message(GRUPO_ID,f"✅ GREEN Tendência no número {num}")
-            tendencia_ativa = False
-            return
-        if rodadas_tendencia >= 3:
-            bot.send_message(GRUPO_ID,"❌ LOSS Tendência")
-            tendencia_ativa = False
-        return
-
-    if placar["par"] >= 8 or placar["preto"] >= 6 or placar["alto"] >= 7:
-        tendencia_ativa = True
-        rodadas_tendencia = 0
-        # numeros contrários ao que está forte
-        numeros_tendencia = [n for n in range(1,37)
-                             if n%2==1 and n in vermelhos and n in baixos]
-        bot.send_message(GRUPO_ID,
-f"""🔥 FILTRO INTELIGENTE ATIVADO
-
-Entrar nos números: {sorted(numeros_tendencia)}
-(Válido por 3 rodadas)
-""")
-
-# ================= RESUMO 15 RODADAS =================
+# ================= RESUMO + FILTRO APÓS 15 RODADAS =================
 def resumo_15_rodadas():
     global numeros, placar
-    # Mostrar resultado
+
     bot.send_message(GRUPO_ID,
 f"""📊 RESUMO 15 RODADAS
 
@@ -196,7 +168,8 @@ Par {placar['par']} x {placar['impar']} Ímpar
 Preto {placar['preto']} x {placar['vermelho']} Vermelho
 Alto {placar['alto']} x {placar['baixo']} Baixo
 """)
-    # Calcular tendência contrária
+
+    # ✅ FILTRO INTELIGENTE SÓ APÓS 15 RODADAS
     numeros_contra = []
     if placar["par"] > placar["impar"]:
         numeros_contra += [n for n in range(37) if n%2==1]  # impar
@@ -215,11 +188,13 @@ Alto {placar['alto']} x {placar['baixo']} Baixo
 
     if numeros_contra:
         bot.send_message(GRUPO_ID,
-f"""🔮 TENDÊNCIA CONTRÁRIA 15 RODADAS
+f"""🔮 FILTRO INTELIGENTE 15 RODADAS
 
-Números sugeridos: {sorted(numeros_contra)}
+Números sugeridos (contrário ao que ganhou):
+{sorted(numeros_contra)}
 """)
 
+    # Zera contador e painel
     resetar()
 
 # ================= COMANDOS =================
@@ -260,8 +235,8 @@ def clique(call):
     )
 
     verificar_estrategias(num)
-    analisar_tendencia(num)
 
+    # Aplica filtro inteligente somente após 15 rodadas
     if len(numeros) == 15:
         resumo_15_rodadas()
 
