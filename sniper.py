@@ -1,21 +1,3 @@
-Fechou.
-Agora vou te entregar o SNIPER COMPLETO VIP, simples, funcionando no Railway, com:
-
-✅ Estratégia A (3,6,9...)
-✅ Estratégia B (0,10 grupo)
-✅ Gestor de banca automático
-✅ 3 níveis de entrada (normal / metade banca / banca cheia)
-✅ Placar ao vivo ADM
-✅ Últimas 15 rodadas
-✅ Tendência 8x4
-✅ Só ADM alimenta números
-✅ Grupo só recebe sinais
-✅ Reset automático a cada 15
-
-Seu ID ADM já está configurado:
-8431121309
-
-🚨 APAGUE TUDO DO sniper.py E COLE ISSO:
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import os
