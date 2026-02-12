@@ -8,7 +8,7 @@ bot = telebot.TeleBot(TOKEN)
 GRUPO_ID = -1003629208122
 ADMIN_ID = 8431121309
 
-# ================= CONFIG NUMEROS =================
+# ================= CONFIGURAÇÕES =================
 
 vermelhos = {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36}
 pretos = {2,4,6,8,10,11,13,15,17,20,22,24,26,28,29,31,33,35}
@@ -19,30 +19,30 @@ grupo_A = {3,6,9}
 grupo_B = {0,10}
 
 numeros = []
-placar = {"par":0,"impar":0,"preto":0,"vermelho":0,"alto":0,"baixo":0}
-banca = {}
+placar = {}
+banca = 0
 entrada_ativa = None
 alerta_enviado = False
-painel_msg_id = None
+painel_id = None
+tendencia_enviada = False
 
-# ================= TECLADO 0-36 =================
+# ================= FUNÇÕES BASE =================
 
-def teclado_numeros():
-    markup = InlineKeyboardMarkup(row_width=6)
-    botoes = []
-    for i in range(37):
-        botoes.append(InlineKeyboardButton(str(i), callback_data=str(i)))
-    markup.add(*botoes)
-    return markup
-
-# ================= PLACAR =================
-
-def resetar():
-    global numeros, placar, entrada_ativa, alerta_enviado
+def resetar_tudo():
+    global numeros, placar, entrada_ativa, alerta_enviado, tendencia_enviada
     numeros = []
     placar = {"par":0,"impar":0,"preto":0,"vermelho":0,"alto":0,"baixo":0}
     entrada_ativa = None
     alerta_enviado = False
+    tendencia_enviada = False
+
+resetar_tudo()
+
+def teclado():
+    kb = InlineKeyboardMarkup(row_width=6)
+    botoes = [InlineKeyboardButton(str(i), callback_data=str(i)) for i in range(37)]
+    kb.add(*botoes)
+    return kb
 
 def atualizar_placar(num):
     if num != 0:
@@ -55,6 +55,7 @@ def atualizar_placar(num):
             placar["preto"] += 1
         if num in vermelhos:
             placar["vermelho"] += 1
+
         if num in altos:
             placar["alto"] += 1
         if num in baixos:
@@ -64,36 +65,32 @@ def texto_painel():
     return f"""
 🎯 SNIPER VIP AO VIVO ({len(numeros)}/15)
 
-⚫ Preto: {placar['preto']}
-🔴 Vermelho: {placar['vermelho']}
-
-🔵 Par: {placar['par']}
-🟣 Ímpar: {placar['impar']}
-
-⬆ Alto: {placar['alto']}
-⬇ Baixo: {placar['baixo']}
+⚫ Preto: {placar['preto']} | 🔴 Vermelho: {placar['vermelho']}
+🔵 Par: {placar['par']} | 🟣 Ímpar: {placar['impar']}
+⬆ Alto: {placar['alto']} | ⬇ Baixo: {placar['baixo']}
 """
 
 # ================= GESTOR =================
 
 def enviar_gestor(qtd):
-    if ADMIN_ID not in banca:
+    global banca
+    if banca <= 0:
         return
 
-    saldo = banca[ADMIN_ID]
+    def calc(ficha):
+        total = ficha * qtd
+        if total > banca:
+            ficha = banca/qtd
+            total = banca
+        ganho = ficha * 36
+        lucro = ganho - total
+        return round(ficha,2), round(lucro,2)
 
-    def calc(percent):
-        valor = saldo * percent
-        ficha = round(valor/qtd,2)
-        ganho = round(ficha*36,2)
-        lucro = round(ganho-valor,2)
-        return ficha, ganho, lucro
+    f1,l1 = calc(1)
+    f2,l2 = calc(2)
+    f3,l3 = calc(4)
 
-    f1,g1,l1 = calc(0.24)
-    f2,g2,l2 = calc(0.48)
-    f3,g3,l3 = calc(1.0)
-
-    bot.send_message(GRUPO_ID, f"""
+    bot.send_message(GRUPO_ID,f"""
 💰 GESTÃO DE BANCA
 
 🔹 Conservador
@@ -104,12 +101,47 @@ Lucro: R${l1}
 Ficha: R${f2}
 Lucro: R${l2}
 
-🔹 Agressivo
+🔹 Máximo
 Ficha: R${f3}
 Lucro: R${l3}
 """)
 
-# ================= ESTRATEGIAS =================
+# ================= TENDÊNCIA COMBINADA =================
+
+def analisar_tendencia():
+    global tendencia_enviada
+
+    if len(numeros) < 12 or tendencia_enviada:
+        return
+
+    if placar["preto"] >= 8 or placar["vermelho"] >= 8:
+        tendencia_enviada = True
+
+        cor_dominante = "preto" if placar["preto"] >= placar["vermelho"] else "vermelho"
+        par_dominante = "par" if placar["par"] >= placar["impar"] else "impar"
+        altura_dominante = "alto" if placar["alto"] >= placar["baixo"] else "baixo"
+
+        numeros_filtrados = []
+
+        for n in range(1,37):
+
+            cond_cor = (n in vermelhos) if cor_dominante == "preto" else (n in pretos)
+            cond_par = (n % 2 == 1) if par_dominante == "par" else (n % 2 == 0)
+            cond_altura = (n in baixos) if altura_dominante == "alto" else (n in altos)
+
+            if cond_cor and cond_par and cond_altura:
+                numeros_filtrados.append(n)
+
+        bot.send_message(GRUPO_ID,
+            f"""🔥 TENDÊNCIA DETECTADA
+
+Domínio identificado.
+Entrar nos números:
+
+{sorted(numeros_filtrados)}
+""")
+
+# ================= ESTRATÉGIAS =================
 
 def verificar_estrategia(num):
     global entrada_ativa, alerta_enviado
@@ -143,42 +175,37 @@ def verificar_estrategia(num):
                 f"🚨 ENTRAR AGORA\n\nApós o número: {num}\n\n🎯 Estratégia B\nEntrar: 0 - 10")
             enviar_gestor(2)
 
-# ================= TENDENCIA =================
-
-def analisar_tendencia():
-    if len(numeros) < 12:
-        return
-
-    if placar["par"] >= 8:
-        nums = [n for n in range(37) if n % 2 == 1]
-        bot.send_message(GRUPO_ID,f"📊 PAR forte\nEntrar ÍMPAR\n{nums}")
-
-    if placar["impar"] >= 8:
-        nums = [n for n in range(37) if n % 2 == 0]
-        bot.send_message(GRUPO_ID,f"📊 ÍMPAR forte\nEntrar PAR\n{nums}")
-
-# ================= START =================
+# ================= COMANDOS =================
 
 @bot.message_handler(commands=['start'])
 def start(msg):
     if msg.from_user.id != ADMIN_ID:
-        bot.send_message(msg.chat.id,"🔒 Apenas admin controla.")
+        bot.send_message(msg.chat.id,"🔒 Apenas admin.")
         return
-
     bot.send_message(msg.chat.id,"Digite o saldo da banca:")
+
+@bot.message_handler(commands=['reset'])
+def reset_cmd(msg):
+    if msg.from_user.id == ADMIN_ID:
+        resetar_tudo()
+        bot.send_message(GRUPO_ID,"♻ Rodadas resetadas.")
+
+@bot.message_handler(commands=['teste'])
+def teste_gestor(msg):
+    if msg.from_user.id == ADMIN_ID:
+        enviar_gestor(3)
 
 @bot.message_handler(func=lambda m: m.from_user.id == ADMIN_ID and m.text.isdigit())
 def salvar_banca(msg):
-    banca[ADMIN_ID] = float(msg.text)
+    global banca, painel_id
+    banca = float(msg.text)
+    painel = bot.send_message(GRUPO_ID, texto_painel(), reply_markup=teclado())
+    painel_id = painel.message_id
 
-    global painel_msg_id
-    painel = bot.send_message(GRUPO_ID, texto_painel(), reply_markup=teclado_numeros())
-    painel_msg_id = painel.message_id
-
-# ================= CLIQUE NUMERO =================
+# ================= CLIQUES =================
 
 @bot.callback_query_handler(func=lambda call: True)
-def clicar(call):
+def clique(call):
     global numeros
 
     if call.from_user.id != ADMIN_ID:
@@ -191,8 +218,8 @@ def clicar(call):
     bot.edit_message_text(
         texto_painel(),
         GRUPO_ID,
-        painel_msg_id,
-        reply_markup=teclado_numeros()
+        painel_id,
+        reply_markup=teclado()
     )
 
     verificar_estrategia(num)
@@ -200,11 +227,13 @@ def clicar(call):
 
     if len(numeros) == 15:
         bot.send_message(GRUPO_ID,
-            f"📈 RESULTADO 15 RODADAS\n\n"
-            f"Par {placar['par']} x {placar['impar']} Ímpar\n"
-            f"Preto {placar['preto']} x {placar['vermelho']} Vermelho\n"
-            f"Alto {placar['alto']} x {placar['baixo']} Baixo")
-        resetar()
+            f"""📈 RESULTADO DAS 15 RODADAS
 
-print("🔥 SNIPER VIP 100% ONLINE 🔥")
+Par {placar['par']} x {placar['impar']} Ímpar
+Preto {placar['preto']} x {placar['vermelho']} Vermelho
+Alto {placar['alto']} x {placar['baixo']} Baixo
+""")
+        resetar_tudo()
+
+print("🔥 SNIPER VIP DEFINITIVO ONLINE 🔥")
 bot.infinity_polling()
