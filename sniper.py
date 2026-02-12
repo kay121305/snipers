@@ -1,7 +1,6 @@
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import os
-import time
 
 # ================= CONFIGURAÇÃO =================
 TOKEN = os.getenv("TOKEN")
@@ -17,18 +16,20 @@ altos = set(range(19,37))
 baixos = set(range(1,19))
 
 # Estratégias
-grupo_A = {3,6,9,13,16,19,23,26,29,33,36}
-grupo_B = {19,15,32,0,26,3,35,12,28,8,23,10,5}
+grupo_A = {3,6,9,13,16,19,23,26,29,33,36}  # DG du GRAKRAL
+grupo_B = {19,15,32,0,26,3,35,12,28,8,23,10,5}  # Makako LK
 
 # ================= VARIÁVEIS GLOBAIS =================
 numeros = []
 placar = {"par":0,"impar":0,"preto":0,"vermelho":0,"alto":0,"baixo":0}
 painel_id = None
+mensagens_reset = []
 
 entrada_ativa = None
 grupo_entrada = None
 gales = 0
 numero_alerta = None
+nome_jogada = ""
 
 filtro_ativo = False
 numeros_filtro = []
@@ -40,17 +41,29 @@ aguardando_banca = False
 # ================= FUNÇÕES =================
 def resetar():
     """Reseta contadores e variáveis de rodadas"""
-    global numeros, placar, entrada_ativa, gales
-    global numero_alerta, filtro_ativo, numeros_filtro, gales_filtro
+    global numeros, placar, entrada_ativa, gales, numero_alerta
+    global filtro_ativo, numeros_filtro, gales_filtro, grupo_entrada, nome_jogada
 
     numeros.clear()
     placar.update({"par":0,"impar":0,"preto":0,"vermelho":0,"alto":0,"baixo":0})
     entrada_ativa = None
     gales = 0
     numero_alerta = None
+    grupo_entrada = None
+    nome_jogada = ""
     filtro_ativo = False
     numeros_filtro.clear()
     gales_filtro = 0
+
+def limpar_mensagens():
+    """Apaga mensagens antigas do painel"""
+    global mensagens_reset
+    for msg_id in mensagens_reset:
+        try:
+            bot.delete_message(GRUPO_ID, msg_id)
+        except:
+            continue
+    mensagens_reset.clear()
 
 # ================= TECLADO 0–36 =================
 def teclado():
@@ -99,6 +112,7 @@ def atualizar_placar(num):
 # ================= GESTOR DE BANCA =================
 def enviar_gestor(numeros_aposta):
     """Envia sugestões de apostas com base na banca"""
+    global mensagens_reset
     if banca <= 0:
         return
 
@@ -106,8 +120,8 @@ def enviar_gestor(numeros_aposta):
     medio = round(banca * 0.05,2)
     agressivo = round(banca * 0.10,2)
 
-    bot.send_message(GRUPO_ID,
-f"""💰 GESTÃO DE BANCA
+    msg = bot.send_message(GRUPO_ID,
+f"""💰 GESTÃO DE BANCA - {nome_jogada}
 
 Entrada: {sorted(numeros_aposta)}
 
@@ -115,11 +129,12 @@ Entrada: {sorted(numeros_aposta)}
 🔸 Médio: R${medio} por ficha
 🔺 Agressivo: R${agressivo} por ficha
 """)
+    mensagens_reset.append(msg.message_id)
 
 # ================= ESTRATEGIAS =================
 def verificar_sinal_10_rodadas():
     """Checa se Estratégia A ou B deve disparar"""
-    global entrada_ativa, grupo_entrada, gales, numero_alerta
+    global entrada_ativa, grupo_entrada, gales, numero_alerta, nome_jogada
     ultimos10 = numeros[-10:] if len(numeros) >= 10 else numeros
 
     # Estratégia A
@@ -128,13 +143,14 @@ def verificar_sinal_10_rodadas():
         grupo_entrada = grupo_A
         numero_alerta = ultimos10[-1] if ultimos10 else None
         gales = 0
-        bot.send_message(GRUPO_ID,
-f"""🚨 SINAL ESTRATÉGIA A (10 rodadas sem vir)
+        nome_jogada = "DG du GRAKRAL"
+        msg = bot.send_message(GRUPO_ID,
+f"""🚨 SINAL ESTRATÉGIA A - {nome_jogada} (10 rodadas sem vir)
 
 Último número antes do sinal: {numero_alerta}
 Entrar nos números: {sorted(grupo_A)}
-Até 3 Gales
 """)
+        mensagens_reset.append(msg.message_id)
         enviar_gestor(grupo_A)
 
     # Estratégia B
@@ -143,27 +159,29 @@ Até 3 Gales
         grupo_entrada = grupo_B
         numero_alerta = ultimos10[-1] if ultimos10 else None
         gales = 0
-        bot.send_message(GRUPO_ID,
-f"""🚨 SINAL ESTRATÉGIA B (10 rodadas sem vir)
+        nome_jogada = "Makako LK"
+        msg = bot.send_message(GRUPO_ID,
+f"""🚨 SINAL ESTRATÉGIA B - {nome_jogada} (10 rodadas sem vir)
 
 Último número antes do sinal: {numero_alerta}
 Entrar nos números: {sorted(grupo_B)}
-Até 3 Gales
 """)
+        mensagens_reset.append(msg.message_id)
         enviar_gestor(grupo_B)
 
 # ================= RESUMO 15 RODADAS =================
 def resumo_15_rodadas():
     """Envia resumo e filtro inteligente após 15 rodadas"""
-    global numeros, placar, filtro_ativo, numeros_filtro, gales_filtro
+    global numeros, placar, filtro_ativo, numeros_filtro, gales_filtro, mensagens_reset
 
-    bot.send_message(GRUPO_ID,
+    msg = bot.send_message(GRUPO_ID,
 f"""📊 RESUMO 15 RODADAS
 
 Par {placar['par']} x {placar['impar']} Ímpar
 Preto {placar['preto']} x {placar['vermelho']} Vermelho
 Alto {placar['alto']} x {placar['baixo']} Baixo
 """)
+    mensagens_reset.append(msg.message_id)
 
     # Filtro inteligente
     numeros_filtro.clear()
@@ -185,13 +203,14 @@ Alto {placar['alto']} x {placar['baixo']} Baixo
     if numeros_filtro:
         filtro_ativo = True
         gales_filtro = 0
-        bot.send_message(GRUPO_ID,
+        msg = bot.send_message(GRUPO_ID,
 f"""🔮 FILTRO INTELIGENTE 15 RODADAS
 
 Números sugeridos (contrário ao que venceu):
 {sorted(numeros_filtro)}
 Até 3 Gales
 """)
+        mensagens_reset.append(msg.message_id)
 
     resetar()
 
@@ -213,6 +232,14 @@ def salvar_banca(msg):
         painel = bot.send_message(GRUPO_ID,painel_texto(),reply_markup=teclado())
         painel_id = painel.message_id
 
+@bot.message_handler(commands=['reset'])
+def reset(msg):
+    if msg.from_user.id != ADMIN_ID:
+        return
+    limpar_mensagens()
+    resetar()
+    bot.send_message(GRUPO_ID,"✅ Painel e contadores resetados!")
+
 # ================= CLIQUE =================
 @bot.callback_query_handler(func=lambda call: True)
 def clique(call):
@@ -233,41 +260,37 @@ def clique(call):
         reply_markup=teclado()
     )
 
-    # ================= Green Estratégia A/B =================
+    # ================= GREEN Estratégia A/B =================
     if entrada_ativa:
         if num in grupo_entrada:
-            bot.send_message(GRUPO_ID,f"✅ GREEN no número {num}")
+            bot.send_message(GRUPO_ID,f"✅ GREEN {nome_jogada} no número {num}")
             entrada_ativa = False
             gales = 0
         else:
             gales += 1
             if gales >= 3:
-                bot.send_message(GRUPO_ID,"❌ LOSS — Próxima entrada")
+                bot.send_message(GRUPO_ID,f"❌ LOSS {nome_jogada}")
                 entrada_ativa = False
                 gales = 0
-            else:
-                bot.send_message(GRUPO_ID,f"⚠ Gale {gales}")
 
-    # ================= Green Filtro Inteligente =================
+    # ================= GREEN Filtro Inteligente =================
     if filtro_ativo:
         if num in numeros_filtro:
-            bot.send_message(GRUPO_ID,f"✅ GREEN do FILTRO INTELIGENTE no número {num}")
+            bot.send_message(GRUPO_ID,f"✅ GREEN FILTRO INTELIGENTE no número {num}")
             filtro_ativo = False
             gales_filtro = 0
         else:
             gales_filtro += 1
             if gales_filtro >= 3:
-                bot.send_message(GRUPO_ID,"❌ LOSS — Filtro Inteligente")
+                bot.send_message(GRUPO_ID,"❌ LOSS FILTRO INTELIGENTE")
                 filtro_ativo = False
                 gales_filtro = 0
-            else:
-                bot.send_message(GRUPO_ID,f"⚠ Gale Filtro {gales_filtro}")
 
-    # Checa sinal de Estratégia A/B apenas após 10 rodadas
+    # Checa sinal de Estratégia A/B após 10 rodadas
     if len(numeros) >= 10:
         verificar_sinal_10_rodadas()
 
-    # Resumo e filtro após 15 rodadas
+    # Resumo após 15 rodadas
     if len(numeros) == 15:
         resumo_15_rodadas()
 
