@@ -135,4 +135,165 @@ Entrada: {sorted(numeros_aposta)}
 def verificar_sinal_10_rodadas():
     """Checa se Estratégia A ou B deve disparar"""
     global entrada_ativa, grupo_entrada, gales, numero_alerta, nome_jogada
-    …
+    ultimos10 = numeros[-10:] if len(numeros) >= 10 else numeros
+
+    # Estratégia A
+    if not any(n in grupo_A for n in ultimos10):
+        entrada_ativa = True
+        grupo_entrada = grupo_A
+        numero_alerta = ultimos10[-1] if ultimos10 else None
+        gales = 0
+        nome_jogada = "DG du GRAL"
+        msg = bot.send_message(GRUPO_ID,
+f"""🚨 SINAL {nome_jogada} (10 rodadas sem vir)
+
+Último número antes do sinal: {numero_alerta}
+Entrar nos números: {sorted(grupo_A)}
+""")
+        mensagens_reset.append(msg.message_id)
+        enviar_gestor(grupo_A)
+
+    # Estratégia B
+    elif not any(n in grupo_B for n in ultimos10):
+        entrada_ativa = True
+        grupo_entrada = grupo_B
+        numero_alerta = ultimos10[-1] if ultimos10 else None
+        gales = 0
+        nome_jogada = "Makako777"
+        msg = bot.send_message(GRUPO_ID,
+f"""🚨 SINAL {nome_jogada} (10 rodadas sem vir)
+
+Último número antes do sinal: {numero_alerta}
+Entrar nos números: {sorted(grupo_B)}
+""")
+        mensagens_reset.append(msg.message_id)
+        enviar_gestor(grupo_B)
+
+# ================= RESUMO 15 RODADAS =================
+def resumo_15_rodadas():
+    """Envia resumo e filtro inteligente após 15 rodadas"""
+    global numeros, placar, filtro_ativo, numeros_filtro, gales_filtro, mensagens_reset
+
+    msg = bot.send_message(GRUPO_ID,
+f"""📊 RESUMO 15 RODADAS
+
+Par {placar['par']} x {placar['impar']} Ímpar
+Preto {placar['preto']} x {placar['vermelho']} Vermelho
+Alto {placar['alto']} x {placar['baixo']} Baixo
+""")
+    mensagens_reset.append(msg.message_id)
+
+    # Filtro inteligente
+    numeros_filtro.clear()
+    if placar["par"] > placar["impar"]:
+        numeros_filtro += [n for n in range(37) if n%2==1]
+    else:
+        numeros_filtro += [n for n in range(37) if n%2==0]
+
+    if placar["preto"] > placar["vermelho"]:
+        numeros_filtro = [n for n in numeros_filtro if n in vermelhos]
+    else:
+        numeros_filtro = [n for n in numeros_filtro if n in pretos]
+
+    if placar["alto"] > placar["baixo"]:
+        numeros_filtro = [n for n in numeros_filtro if n in baixos]
+    else:
+        numeros_filtro = [n for n in numeros_filtro if n in altos]
+
+    if numeros_filtro:
+        filtro_ativo = True
+        gales_filtro = 0
+        msg = bot.send_message(GRUPO_ID,
+f"""🔮 FILTRO INTELIGENTE 15 RODADAS
+
+Números sugeridos (contrário ao que venceu):
+{sorted(numeros_filtro)}
+Até 3 Gales
+""")
+        mensagens_reset.append(msg.message_id)
+
+    resetar()
+
+# ================= COMANDOS =================
+@bot.message_handler(commands=['start'])
+def start(msg):
+    global aguardando_banca
+    if msg.from_user.id != ADMIN_ID:
+        return
+    aguardando_banca = True
+    bot.send_message(msg.chat.id,"Digite o valor da banca:")
+
+@bot.message_handler(func=lambda m: m.from_user.id == ADMIN_ID and m.text.replace('.','',1).isdigit())
+def salvar_banca(msg):
+    global banca, aguardando_banca, painel_id
+    if aguardando_banca:
+        banca = float(msg.text)
+        aguardando_banca = False
+        painel = bot.send_message(GRUPO_ID,painel_texto(),reply_markup=teclado())
+        painel_id = painel.message_id
+
+@bot.message_handler(commands=['reset'])
+def reset(msg):
+    if msg.from_user.id != ADMIN_ID:
+        return
+    limpar_mensagens()
+    resetar()
+    bot.send_message(GRUPO_ID,"✅ Painel e contadores resetados!")
+
+# ================= CLIQUE =================
+@bot.callback_query_handler(func=lambda call: True)
+def clique(call):
+    global numeros, entrada_ativa, gales, filtro_ativo, gales_filtro
+
+    if call.from_user.id != ADMIN_ID:
+        return
+
+    num = int(call.data)
+    numeros.append(num)
+    atualizar_placar(num)
+
+    # Atualiza painel
+    bot.edit_message_text(
+        painel_texto(),
+        GRUPO_ID,
+        painel_id,
+        reply_markup=teclado()
+    )
+
+    # ================= GREEN Estratégia A/B =================
+    if entrada_ativa:
+        if num in grupo_entrada:
+            bot.send_message(GRUPO_ID,f"✅ GREEN {nome_jogada} no número {num}")
+            entrada_ativa = False
+            gales = 0
+        else:
+            gales += 1
+            if gales >= 3:
+                bot.send_message(GRUPO_ID,f"❌ LOSS {nome_jogada}")
+                entrada_ativa = False
+                gales = 0
+
+    # ================= GREEN Filtro Inteligente =================
+    if filtro_ativo:
+        if num in numeros_filtro:
+            bot.send_message(GRUPO_ID,f"✅ GREEN FILTRO INTELIGENTE no número {num}")
+            filtro_ativo = False
+            gales_filtro = 0
+        else:
+            gales_filtro += 1
+            if gales_filtro >= 3:
+                bot.send_message(GRUPO_ID,"❌ LOSS FILTRO INTELIGENTE")
+                filtro_ativo = False
+                gales_filtro = 0
+
+    # Checa sinal de Estratégia A/B após 10 rodadas
+    if len(numeros) >= 10:
+        verificar_sinal_10_rodadas()
+
+    # Resumo após 15 rodadas
+    if len(numeros) == 15:
+        resumo_15_rodadas()
+
+# ================= INICIO =================
+print("🔥 SNIPER VIP PAINEL 0–36 INTERATIVO COMPLETO 🔥")
+bot.infinity_polling()
